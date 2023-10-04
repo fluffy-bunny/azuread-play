@@ -35,6 +35,38 @@ func NewClient(tenantID string, clientID string, clientSecret string) (aad *AAD,
 	return aad, nil
 }
 
+func (aad *AAD) GetUserById(ctx context.Context, userId string) (*User, error) {
+	result, err := aad.graphClient.Users().ByUserId(userId).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	u := User{}
+	u.ID = *result.GetId()
+	u.DisplayName = *result.GetDisplayName()
+	u.Mail = *result.GetMail()
+	return &u, nil
+}
+func (aad *AAD) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	strPtr := func(s string) *string { return &s }
+	result, err := aad.graphClient.Users().Get(ctx, &microsoftgraph_users.UsersRequestBuilderGetRequestConfiguration{
+		QueryParameters: &microsoftgraph_users.UsersRequestBuilderGetQueryParameters{
+			Filter: strPtr("mail eq '" + email + "'"),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	res2 := result.GetValue()
+	if len(res2) == 0 {
+		return nil, nil
+	}
+	userable := res2[0]
+	u := User{}
+	u.ID = *userable.GetId()
+	u.DisplayName = *userable.GetDisplayName()
+	u.Mail = *userable.GetMail()
+	return &u, nil
+}
 func (aad *AAD) IterateUsers(ctx context.Context, callback func(user *User) bool) error {
 	headers := abstractions.NewRequestHeaders()
 	headers.Add("ConsistencyLevel", "eventual")

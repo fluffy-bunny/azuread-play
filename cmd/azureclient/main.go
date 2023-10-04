@@ -36,4 +36,24 @@ func main() {
 		log.Info().Interface("user", user).Msg("User")
 		return true
 	})
+	client.IterateUsers(ctx, func(user *azureclient.User) bool {
+		userID := user.ID
+		user, err := client.GetUserById(ctx, userID)
+		if err != nil {
+			log.Error().Err(err).Msg("Error getting user")
+			return true
+		}
+		log.Info().Interface("user", user).Msg("User")
+		return true
+	})
+	client.IterateUsers(ctx, func(user *azureclient.User) bool {
+		email := user.Mail
+		user, err := client.GetUserByEmail(ctx, email)
+		if err != nil {
+			log.Error().Err(err).Msg("Error getting user")
+			return true
+		}
+		log.Info().Interface("user", user).Msg("User")
+		return true
+	})
 }
