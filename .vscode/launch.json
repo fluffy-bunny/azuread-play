@@ -16,6 +16,17 @@
             "args": [  ]
         },
         {
+            "name": "oidc_client_app",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/cmd/oidc_client_app",
+            "env": {
+ 
+            },
+            "args": [  ]
+        },
+        {
             "name": "users userAD",
             "type": "go",
             "request": "launch",
@@ -28,3 +39,4 @@
         }
     ]
 }
+
