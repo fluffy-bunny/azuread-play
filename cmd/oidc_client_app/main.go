@@ -4,6 +4,7 @@ This is an example application to demonstrate querying the user info endpoint.
 package main
 
 import (
+	"azuread-play/internal/azureclient"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -13,9 +14,8 @@ import (
 	"os"
 	"time"
 
-	"azuread-play/internal/azureclient"
-
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog"
 	"golang.org/x/net/context"
@@ -70,6 +70,7 @@ func main() {
 	client, err := azureclient.NewClient(tenantID, clientID, clientSecret)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Error creating client")
+		client = nil
 	}
 
 	discoveryBaseURL := fmt.Sprintf(discoveryBaseURLT, tenantID)
@@ -87,10 +88,16 @@ func main() {
 		ClientSecret: clientSecret,
 		Endpoint:     endpoint,
 		RedirectURL:  "http://localhost:5556/auth/callback",
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email", "User.Read"},
+		Scopes: []string{
+			oidc.ScopeOpenID,
+			"profile",
+			"email",
+			"User.Read",
+			//	"Group.Read",
+		},
 	}
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/login", func(w http.ResponseWriter, r *http.Request) {
 		state, err := randString(16)
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -124,21 +131,37 @@ func main() {
 			return
 		}
 		groups := []string{}
-		user, err := client.GetUserByEmail(ctx, userInfo.Email)
-		if err != nil {
-			log.Error().Err(err).Msg("Error getting user")
-		} else {
-			client.IterateUserGroups(ctx, user.ID, func(group string) bool {
-				groups = append(groups, group)
-				return true
-			})
+		if client == nil {
+			// pull the groups directly from the MSGRAPH api
+			user, err := client.GetUserByEmail(ctx, userInfo.Email)
+			if err != nil {
+				log.Error().Err(err).Msg("Error getting user")
+			} else {
+				client.IterateUserGroups(ctx, user.ID, func(group string) bool {
+					groups = append(groups, group)
+					return true
+				})
+			}
 		}
 
+		// decode access_token
+		jwtIdToken := oauth2Token.Extra("id_token").(string)
+		var idToken *jwt.Token
+		jwtParser := jwt.NewParser()
+		idToken, _, err = jwtParser.ParseUnverified(jwtIdToken, jwt.MapClaims{})
+		if err != nil {
+			log.Error().Err(err).Msg("Error parsing JWT")
+		}
+		accessToken, _, err := jwtParser.ParseUnverified(oauth2Token.AccessToken, jwt.MapClaims{})
+		if err != nil {
+			log.Error().Err(err).Msg("Error parsing JWT - accessToken")
+		}
 		resp := struct {
-			OAuth2Token *oauth2.Token
-			UserInfo    *oidc.UserInfo
-			Groups      []string
-		}{oauth2Token, userInfo, groups}
+			UserInfo          *oidc.UserInfo
+			Groups            []string
+			IdTokenParsed     *jwt.Token
+			AccessTokenParsed *jwt.Token
+		}{userInfo, groups, idToken, accessToken}
 
 		data, err := json.MarshalIndent(resp, "", "    ")
 		if err != nil {
